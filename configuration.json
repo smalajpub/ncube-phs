@@ -1,0 +1,72 @@
+{
+
+  /* Available onfiguration paramenters
+
+  debug=<val>                       Prints additional warning and debug message: 'true' or 'false' (default)
+  diskCache=<val>                   Enables disk cache: 'true' or 'false' (default)
+  diskCachePath=<val>               Specifies the location for the disk cache
+  ignoreSslErrors=<val>             Ignores SSL errors (expired/self-signed certificate errors): 'true' or 'false' (default)
+  loadImages=<val>                  Loads all inlined images: 'true' (default) or 'false'
+  localUrlAccess=<val>              Allows use of 'file:///' URLs: 'true' (default) or 'false'
+  localStoragePath=<val>            Specifies the location for local storage
+  localStorageQuota=<val>           Sets the maximum size of the local storage (in KB)
+  offlineStoragePath=<val>          Specifies the location for offline storage
+  offlineStorageQuota=<val>         Sets the maximum size of the offline storage (in KB)
+  localToRemoteUrlAccess=<val>      Allows local content to access remote URL: 'true' or 'false' (default)
+  maxDiskCacheSize=<val>            Limits the size of the disk cache (in KB)
+  outputEncoding=<val>              Sets the encoding for the terminal output, default is 'utf8'
+  remoteDebuggerPort=<val>          Starts the script in a debug harness and listens on the specified port
+  remoteDebuggerAutorun=<val>       Runs the script in the debugger immediately: 'true' or 'false' (default)
+  proxy=<val>                       Sets the proxy server, e.g. '--proxy=http://proxy.company.com:8080'
+  proxyAuth=<val>                   Provides authentication information for the proxy, e.g. ''-proxy-auth=username:password'
+  proxyType=<val>                   Specifies the proxy type, 'http' (default), 'none' (disable completely), or 'socks5'
+  scriptEncoding=<val>              Sets the encoding used for the starting script, default is 'utf8'
+  scriptLanguage=<val>              Sets the script language instead of detecting it: 'javascript'
+  webSecurity=<val>                 Enables web security, 'true' (default) or 'false'
+  sslProtocol=<val>                 Selects a specific SSL protocol version to offer. Values (case insensitive): TLSv1.2, TLSv1.1, TLSv1.0, TLSv1 (same as v1.0), SSLv3, or ANY. Default is to offer all that Qt thinks are secure (SSLv3 and up). Not all values may be supported, depending on the system OpenSSL library.
+  sslCiphers=<val>                  Sets supported TLS/SSL ciphers. Argument is a colon-separated list of OpenSSL cipher names (macros like ALL, kRSA, etc. may not be used). Default matches modern browsers.
+  sslCertificatesPath=<val>         Sets the location for custom CA certificates (if none set, uses environment variable SSL_CERT_DIR. If none set too, uses system default)
+  sslClientCertificateFile=<val>    Sets the location of a client certificate
+  sslClientKeyFile=<val>            Sets the location of a clients' private key
+  sslClientKeyPassphrase=<val>      Sets the passphrase for the clients' private key
+  webdriver=<val>                   Starts in 'Remote WebDriver mode' (embedded GhostDriver): '[[<IP>:]<PORT>]' (default '127.0.0.1:8910')
+  webdriverLogfile=<val>            File where to write the WebDriver's Log (default 'none') (NOTE: needs '--webdriver')
+  webdriverLoglevel=<val>           WebDriver Logging Level: (supported: 'ERROR', 'WARN', 'INFO', 'DEBUG') (default 'INFO') (NOTE: needs '--webdriver')
+  webdriverSeleniumGridHub=<val>    URL to the Selenium Grid HUB: 'URL_TO_HUB' (default 'none') (NOTE: needs '--webdriver')
+
+  */
+
+  /* Same as: --ignore-ssl-errors=true */
+  "ignoreSslErrors": true,
+
+  /* Same as: --max-disk-cache-size=1000 */
+  // "maxDiskCacheSize": 0,
+
+  /* Same as: --output-encoding=utf8 */
+  "outputEncoding": "utf8",
+
+  /* script language */
+  "scriptLanguage": "javascript",
+  
+  /* stop loading images */
+  "loadImages": "false",
+
+  "localToRemoteUrlAccess":"false",
+
+  "localUrlAccess": "false",
+
+  /* Disable web security to access IFrame data coming from different domains */
+  "webSecurity": "false",
+
+  /* ignores invalid SSL certificates (maybe a risk !!!) */
+  "ignoreSslErrors": "true",
+  
+  "diskCache": "false",
+  "diskCachePath": "c:/temp/phantomCache",
+
+  "cookiesFile": "c:/temp/phantomCache"
+  
+  /* Set navigation proxy */
+  // "proxy": "http://10.1.2.40:3400"
+  /* etc. */
+}

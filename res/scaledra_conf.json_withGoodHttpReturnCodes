@@ -1,0 +1,57 @@
+{
+  "name": "Scaledra Active Proxy",
+  "extensions": {
+    "defaultExtracteEngine": "mercury",
+    "mercuryReaderApiKey": "ozEQ0Cz0HXZUshRKue1BYhfLGH1RNlnMxp8RpH3k"
+  },
+  "globals": {
+    "responseTimeoutMs": 50000,
+    "jsLinkResolverStrategy": 3,
+    "filepropertiesEscaladeToV2": false,
+    "requestAbortTerms": [
+      "perimeterx"
+    ],
+    "commonHttpHeaders": {
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Ubuntu Chromium/79.0.3945.130 Chrome/79.0.3945.130 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+      "Accept-Language": "en-US",
+      "Cache-Control": "no-cache"
+    }
+  },
+  "helperMethods": {
+    "fileproperties": {
+      "defaultHttpMethod": "GET"
+    }
+  },
+  "navigationEngines": {
+    "phantomjs": {
+      "waitForAjaxBase": 800
+    },
+    "puppeteer": {
+      "waitForAjaxBase": 800,
+      "enableCaching": true,
+      "devTempDir": ""
+    },
+    "static": {
+      "enableGzipSupport": false,
+      "maxRedirects": 100
+    }
+  },
+  "protocols": {
+    "https": {
+      "NodeTlsRejectUnauthorized": 0
+    },
+    "http": {
+      "goodHttpCodesForResponse": [
+        200,
+        406,
+        404,
+	403,
+	500,
+	400,
+	503
+      ]
+    },
+    "httpProxy": ""
+  }
+}
