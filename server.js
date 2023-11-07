@@ -5981,8 +5981,10 @@ app.post('/api/v3/navigate', async (req, res) => {
 
 
     console.log("Proxy Config:", proxyConfig); // Log the proxy configuration object
+    const { proxyUrl } = scaledraConf.protocols.httpProxyConfig; // proxyUrl, host from Action Playbook
 
-    const proxyAddr = scaledraConf.protocols.httpProxyConfig.proxyUrl || proxyConfig.proxyUrl // from Action playbook or from Scaledra.conf
+    const proxyAddr = proxyUrl || proxyConfig.proxyUrl // from Action playbook or from Scaledra.conf
+    
     const { Builder } = require('selenium-webdriver'),
     proxy = require('selenium-webdriver/proxy'),
     chrome = require('selenium-webdriver/chrome');
@@ -5992,6 +5994,7 @@ app.post('/api/v3/navigate', async (req, res) => {
         http: proxyAddr,
         https: proxyAddr
       });
+
     chromeOptions.setProxy(driverProxyConfig);
     chromeOptions.setLoggingPrefs({ performance: 'ALL' });
 
@@ -6001,10 +6004,15 @@ app.post('/api/v3/navigate', async (req, res) => {
       .build();
 
     const pageCdpConnection = await driver.createCDPConnection('page');
+    
     // await driver.register(scaledraConf.protocols.httpProxyConfig.proxyAuthUser || proxyConfig.proxyAuthUser, scaledraConf.protocols.httpProxyConfig.proxyAuthPassword || proxyConfig.proxyAuthPassword, pageCdpConnection); // read from Action Playbook or Scaledra.conf
     // await driver.sleep(10_000);
-  } else if (scaledraConf.protocols.seleniumProxyConfig.host !== "") {
-    const proxyAddr = `${scaledraConf.protocols.seleniumProxyConfig.host}:${scaledraConf.protocols.seleniumProxyConfig.port}` // from Action playbook or from Scaledra.conf
+  } else if (host !== "") {
+    const { host, port } = scaledraConf.protocols.seleniumProxyConfig; // selenium Proxy config
+    const { proxyAuthUser, proxyAuthPassword } = scaledraConf.protocols.httpProxyConfig; // proxy auth user
+
+    const proxyAddr = `${host}:${port}` // from Action playbook or from Scaledra.conf
+
     const { Builder } = require('selenium-webdriver'),
     proxy = require('selenium-webdriver/proxy'),
     chrome = require('selenium-webdriver/chrome');
@@ -6014,6 +6022,7 @@ app.post('/api/v3/navigate', async (req, res) => {
       http: proxyAddr,
       https: proxyAddr
     });
+
     chromeOptions.setProxy(driverProxyConfig);
     chromeOptions.setLoggingPrefs({ performance: 'ALL' });
     driver = await new Builder()
@@ -6022,8 +6031,9 @@ app.post('/api/v3/navigate', async (req, res) => {
       .build();
 
     const pageCdpConnection = await driver.createCDPConnection('page');
-    await driver.register(scaledraConf.protocols.httpProxyConfig.proxyAuthUser || proxyConfig.proxyAuthUser, scaledraConf.protocols.httpProxyConfig.proxyAuthPassword || proxyConfig.proxyAuthPassword, pageCdpConnection); // read from Action Playbook or Scaledra.conf
+    await driver.register(proxyAuthUser || proxyConfig.proxyAuthUser, proxyAuthPassword || proxyConfig.proxyAuthPassword, pageCdpConnection); // read from Action Playbook or Scaledra.conf
     await driver.sleep(10_000);
+
   }
   else {
     driver = await new Builder().forBrowser('chrome').build(); // Build the driver without proxy configuration
@@ -6062,6 +6072,7 @@ app.post('/api/v3/navigate', async (req, res) => {
     // Get the httpResponseHeaders by http module
     urlParams = URLParse(url, true);
     let logs = await driver.manage().logs().get('performance');
+    
     logs.forEach(function (log) {
         let message = JSON.parse(log.message).message;
         if (message.method === 'Network.responseReceived') {
@@ -6078,11 +6089,13 @@ app.post('/api/v3/navigate', async (req, res) => {
     urlParams = URLParse(landingUrl, true);
     // Follow redirects and update the redirectionChain
     var currentUrl = initialUrl;
+    
     redirectionChain.push({
       httpCode: 301,
       httpDescription: 301,
       httpUrl: url,
     });
+
     urlRedirectStrict = true; // URL redirect strict flag
     urlRedirectSmart = true; // URL redirect smart flag
     
@@ -6112,11 +6125,13 @@ app.post('/api/v3/navigate', async (req, res) => {
         httpDescription,
         httpUrl: nextUrl,
       });
+
       if (httpCode !== 200) {
         // Handle error case here
         console.log(`Error: ${httpCode} ${httpDescription}`);
         break;
       }
+
       if(nextUrl != currentUrl)
         await driver.get(nextUrl);
       currentUrl = nextUrl;
@@ -6144,6 +6159,7 @@ app.post('/api/v3/navigate', async (req, res) => {
     var frameData = await driver.findElements(By.tagName('iframe'));
     var hasFrames = frameData.length;
     console.log(hasFrames);
+    
     async function extractIframe(driver, mainPage) {
       const $ = cheerio.load(mainPage);
       await processIframes(driver, $, $('body'), 0);
@@ -6185,6 +6201,7 @@ app.post('/api/v3/navigate', async (req, res) => {
         }
       }
     }
+    
     function setIframeSrcdoc(pageHTML) {
       const $ = cheerio.load(pageHTML);
     
@@ -6386,7 +6403,6 @@ function fileJsonResponse(headers, url, startTime, endTime, response) {
   return json
 
 }
-
 
 
 /* 
@@ -6605,7 +6621,7 @@ function checkForGoodHttpResponseCodes(httpCode) {
  * 
  * Get e JSON property value for a given path
  * 
- */
+ */                                                                                                                                                                       
 function getJsonProperty(json, path,) {
   try {
     var tokens = path.split(".");
