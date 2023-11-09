@@ -5787,32 +5787,37 @@ app.post('/api/v1/navigate', function (req, res) {
 })
 
 
-
-/*
- * BEGIN v3
+/**
+ *  BEGIN VERSION 3 API
+ *
  */
-app.post('/api/v3/navigate', async (req, res) => {
-  var url = req.body.url; // Get the URL from the request body
-  var renderFormat = req.body.renderFormat || 'html'; // Get the render format from the request body or default to 'html'
-  console.log(req.body); // Log the query parameters to the console
 
-  if (renderFormat === 'html') {
-    // If rendered format is html
-    res.set('Content-Type', 'text/html');
-  } else if (renderFormat === 'json') {
-    // If rendered format is json
-    res.set('Content-Type', 'application/json');
-  } else {
-    // If rendered format is not recognized
-    res.status(400).send(`Unrecognized render format: ${renderFormat}`);
-    return;
+app.post('/api/v3/navigate', async (req, res) => {
+  const {
+    url,
+    renderFormat = "html",
+    includeOriginalHtml,
+    jsLinkParser,
+    getFrameContentId,
+    sessionCookie,
+    forceBody,
+    removePageScripts,
+    actionPlaybook,
+    waitForAjax } = req.body;
+
+  switch (renderFormat) {
+    case 'html':
+      res.set('Content-Type', 'text/html');
+      break;
+    case 'json':
+      res.set('Content-Type', 'application/json');
+      break;
+    default:
+      return res.status(400).send(`Unrecognized render format: ${renderFormat}`);
   }
 
-  // TODO: return error in standard format
   if (!url) {
-    // If URL is missing
-    res.status(400).send('Missing required parameter: url');
-    return;
+    return res.status(400).send('Missing required parameter: url'); // If URL is missing
   }
 
   const responseTimeStart = new Date(); // Record the start time of the response
@@ -5827,86 +5832,64 @@ app.post('/api/v3/navigate', async (req, res) => {
   var urlRedirectSmart = false; // URL redirect smart flag
   var landingUrl; // Store the landing URL
   var urlParams; // URL Params
-  var hasFrame = 0; // Frame
   var httpResponseHeaders;
-  var jsParsingType = jsLinkEnums.parser.simple, frameId = -1, cookies, waitForAjax, includeOriginalHtml = false;
-  if (typeof req.body.jsLinkParser !== "undefined") {
-    jsParsingType = parseInt(req.body.jsLinkParser);
-  }
-  if (typeof req.body.includeOriginalHtml !== "undefined") 
-    includeOriginalHtml = (req.body.includeOriginalHtml === 'true');
-  if (typeof req.body.getFrameContentId !== "undefined") 
-    frameId = parseInt(req.body.getFrameContentId);
-  
-  if (typeof req.body.sessionCookie !== "undefined") {
+  var jsParsingType = jsLinkEnums.parser.simple, frameId = -1, cookies, isOriginalHtml = false;
+
+  if (typeof jsLinkParser !== "undefined")
+        jsParsingType = parseInt(jsLinkParser);
+
+  isOriginalHtml = (typeof includeOriginalHtml !== "undefined") && (includeOriginalHtml === true);
+
+  frameId = typeof getFrameContentId !== "undefined" ? parseInt(getFrameContentId) : undefined;
+
+  if (typeof sessionCookie !== "undefined") {
     if (debug)
-      console.log("DEBUG: session cookie declared: " + req.body.sessionCookie);
-    cookies = req.body.sessionCookie;
-    console.log(cookies);
-    // cookies = 
-  }
-  if (req.body.waitForAjax) {
-    waitForAjax = parseInt(req.body.waitForAjax) + waitForAjaxBase_PUPPETEER;
+      console.log("DEBUG: session cookie declared: " + sessionCookie);
+    cookies = sessionCookie;
   }
 
-  // Get forceBody data
-  if (typeof req.body.forceBody !== 'undefined') {
-    var forceBody = (req.body.forceBody === 'true')
-  } else {
-    var forceBody = false
+  if (waitForAjax) {
+    delayForAjax = parseInt(waitForAjax) + waitForAjaxBase_PUPPETEER;
   }
-  var removePageScripts = req.body.removePageScripts;
-  if(removePageScripts == "true")
-    removePageScripts = true;
-  else
-    removePageScripts = false;
-  // Create an empty redirectionChain array
-  const redirectionChain = [];
+
+  const forceBodyValue = (typeof forceBody !== 'undefined') ? (forceBody === 'true') : false;
+
+  const removeScripts = (removePageScripts === "true");
+
+  const redirectionChain = []; // Create an empty redirectionChain array
 
   let driver = undefined;
   var pageActions;
   var jsParsingType;
-  var skipTidyOutput;
-  var actionPlaybookPlayed = false;
-  var skipLinkParametersParser;
   var userDefinedProxy;
-  var gzipSupport;
 
-  if (req.body.actionPlaybook) {
+  const {proxyUrl, proxyAuthUser, proxyAuthPassword} = scaledraConf.protocols.httpProxyConfig;
+  const { host, port } = scaledraConf.protocols.seleniumProxyConfig;
+  const { Builder, proxy, chrome } = require('selenium-webdriver');
+
+  if (actionPlaybook) {
     try {
-      pageActions = JSON.parse(req.body.actionPlaybook); // Parse the actionPlaybook from the request body
+      pageActions = JSON.parse(actionPlaybook); // Parse the actionPlaybook from the request body
     } catch (error) {
       console.log(`Error parsing action playbook: ${error}`);
     }
 
     if (pageActions && pageActions.globals) {
-      if (pageActions.globals.jsLinkParserStrategy) {
-        jsParsingType = pageActions.globals.jsLinkParserStrategy; // Get the JS link parser strategy
-      }
-      if (pageActions.globals.skipTidyOutput) {
-        skipTidyOutput = pageActions.globals.skipTidyOutput; // Get the skipTidyOutput flag
-        if (!skipTidyOutput) {
-          actionPlaybookPlayed = true; // Set actionPlaybookPlayed flag if skipTidyOutput is false
-        }
-      }
-      if (pageActions.globals.npm) {
-        skipLinkParametersParser = pageActions.globals.npm; // Get the skipLinkParametersParser flag
-      }
-      if (pageActions.globals.useProxyServer) {
-        const useProxyServer = pageActions.globals.useProxyServer; // Get the useProxyServer object from globals
-        userDefinedProxy = {
-          proxyUrl:
-            scaledraConf.protocols.httpProxyConfig.proxyUrl || useProxyServer.proxyUrl, // Get the proxy URL from scaledraConf or override with useProxyServer value
-          proxyAuthUser:
-            scaledraConf.protocols.httpProxyConfig.proxyAuthUser || useProxyServer.proxyAuthUser, // Get the proxy authentication user from scaledraConf or override with useProxyServer value
-          proxyAuthPassword:
-            scaledraConf.protocols.httpProxyConfig.proxyAuthPassword ||
-            useProxyServer.proxyAuthPassword, // Get the proxy authentication password from scaledraConf or override with useProxyServer value
-        };
-        pageActions.globals.useProxyServer = userDefinedProxy; // Update the useProxyServer object in the pageActions
-      }
-      if (pageActions.globals.enableStaticBrowserGzipSupport) {
-        gzipSupport = pageActions.globals.enableStaticBrowserGzipSupport; // Get the enableStaticBrowserGzipSupport flag
+        const {
+            jsLinkParserStrategy,
+            useProxyServer
+         }= pageActions.globals;
+
+       if (jsLinkParserStrategy) jsParsingType = jsLinkParserStrategy; // Get the JS link parser strategy
+
+       if (useProxyServer) {
+         userDefinedProxy = {
+           proxyUrl: proxyUrl || useProxyServer.proxyUrl, // Get the proxy URL from scaledraConf or override with useProxyServer value
+           proxyAuthUser: proxyAuthUser || useProxyServer.proxyAuthUser, // Get the proxy authentication user from scaledraConf or override with useProxyServer value
+           proxyAuthPassword: proxyAuthPassword || useProxyServer.proxyAuthPassword, // Get the proxy authentication password from scaledraConf or override with useProxyServer value
+         };
+
+         useProxyServer = userDefinedProxy; // Update the useProxyServer object in the pageActions
       }
     }
 
@@ -5929,11 +5912,6 @@ app.post('/api/v3/navigate', async (req, res) => {
           url = actionEngine.parseDynamicParams(url); // Parse dynamic parameters in the URL
         }
 
-        // Extract request parameters, request method, and additional headers from the mapping action
-        const params = mappingAction.params;
-        const method = mappingAction.method;
-        const headers = mappingAction.headers;
-
         if (mappingAction.payload) {
           // Replace dynamic fields in the payload with actual values
           mappingAction.payload = actionEngine.replaceDynamicFieldsFromUrl(mappingAction.payload);
@@ -5948,148 +5926,130 @@ app.post('/api/v3/navigate', async (req, res) => {
   let proxyConfig = {}; // Proxy configuration object initialization
   console.log("proxy started");
 
-  if (scaledraConf.protocols.httpProxyConfig.proxyUrl !== "") {
-    // If proxy URL is not empty in scaledraConf
-    proxyConfig = {
-      proxyType: 'manual',
-      proxyUrl: scaledraConf.protocols.httpProxyConfig.proxyUrl, // Set proxy URL
-      proxyAuthUser: scaledraConf.protocols.httpProxyConfig.proxyAuthUser, // Set proxy authentication user
-      proxyAuthPassword: scaledraConf.protocols.httpProxyConfig.proxyAuthPassword, // Set proxy authentication password
-    };
+/**
+ * Setting Proxy From Scaledra Config
+ *
+ */
 
-    if (typeof req.body.actionPlaybook !== "undefined" && req.body.actionPlaybook !== null && req.body.actionPlaybook !== "") {
-      try {
-        const pageActions = JSON.parse(req.body.actionPlaybook); // Parse the actionPlaybook from the request body
-
-        if (typeof pageActions.globals !== 'undefined') {
-          if (pageActions.globals.hasOwnProperty('useProxyServer')) {
-            const useProxyServer = pageActions.globals.useProxyServer; // Get the useProxyServer object from globals
-            proxyConfig = {
-              ...proxyConfig,
-              proxyUrl: useProxyServer.proxyUrl || proxyConfig.proxyUrl, // Override proxy URL if available
-              proxyAuthUser: useProxyServer.proxyAuthUser || proxyConfig.proxyAuthUser, // Override proxy authentication user if available
-              proxyAuthPassword: useProxyServer.proxyAuthPassword || proxyConfig.proxyAuthPassword, // Override proxy authentication password if available
-            };
-          }
-        }
-      } catch (e) {
-        // Handle error parsing actionPlaybook
-        console.error("Error parsing actionPlaybook:", e);
-        // an error response here if needed
-      }
+  if (proxyUrl !== "") {
+    const pageActions = JSON.parse(actionPlaybook || "{}");
+  
+    if (pageActions.globals?.useProxyServer) {
+      const useProxyServer = pageActions.globals.useProxyServer;
+      proxyConfig = {
+        proxyType: 'manual',
+        proxyUrl: useProxyServer.proxyUrl || proxyUrl,
+        proxyAuthUser: useProxyServer.proxyAuthUser || proxyAuthUser,
+        proxyAuthPassword: useProxyServer.proxyAuthPassword || proxyAuthPassword,
+      };
+    } else {
+      proxyConfig = {
+        proxyType: 'manual',
+        proxyUrl,
+        proxyAuthUser,
+        proxyAuthPassword,
+      };
     }
-
-
-    console.log("Proxy Config:", proxyConfig); // Log the proxy configuration object
-    const { proxyUrl } = scaledraConf.protocols.httpProxyConfig; // proxyUrl, host from Action Playbook
-
-    const proxyAddr = proxyUrl || proxyConfig.proxyUrl // from Action playbook or from Scaledra.conf
+  
+    console.log("Proxy Config:", proxyConfig);
     
-    const { Builder } = require('selenium-webdriver'),
-    proxy = require('selenium-webdriver/proxy'),
-    chrome = require('selenium-webdriver/chrome');
-
+    const proxyAddr = proxyConfig.proxyUrl;
+  
     const chromeOptions = new chrome.Options(),
       driverProxyConfig = proxy.manual({
         http: proxyAddr,
         https: proxyAddr
       });
-
+  
     chromeOptions.setProxy(driverProxyConfig);
     chromeOptions.setLoggingPrefs({ performance: 'ALL' });
-
+  
     driver = await new Builder()
       .forBrowser('chrome')
       .setChromeOptions(chromeOptions)
       .build();
-
+  
     const pageCdpConnection = await driver.createCDPConnection('page');
-    
-    // await driver.register(scaledraConf.protocols.httpProxyConfig.proxyAuthUser || proxyConfig.proxyAuthUser, scaledraConf.protocols.httpProxyConfig.proxyAuthPassword || proxyConfig.proxyAuthPassword, pageCdpConnection); // read from Action Playbook or Scaledra.conf
-    // await driver.sleep(10_000);
-  } else if (host !== "") {
-    const { host, port } = scaledraConf.protocols.seleniumProxyConfig; // selenium Proxy config
-    const { proxyAuthUser, proxyAuthPassword } = scaledraConf.protocols.httpProxyConfig; // proxy auth user
-
-    const proxyAddr = `${host}:${port}` // from Action playbook or from Scaledra.conf
-
-    const { Builder } = require('selenium-webdriver'),
-    proxy = require('selenium-webdriver/proxy'),
-    chrome = require('selenium-webdriver/chrome');
-
-    const chromeOptions = new chrome.Options(),
-    driverProxyConfig = proxy.manual({
-      http: proxyAddr,
-      https: proxyAddr
-    });
-
-    chromeOptions.setProxy(driverProxyConfig);
-    chromeOptions.setLoggingPrefs({ performance: 'ALL' });
-    driver = await new Builder()
-      .forBrowser('chrome')
-      .setChromeOptions(chromeOptions)
-      .build();
-
-    const pageCdpConnection = await driver.createCDPConnection('page');
-    await driver.register(proxyAuthUser || proxyConfig.proxyAuthUser, proxyAuthPassword || proxyConfig.proxyAuthPassword, pageCdpConnection); // read from Action Playbook or Scaledra.conf
+  
+    await driver.register(proxyAuthUser || proxyConfig.proxyAuthUser, proxyAuthPassword || proxyConfig.proxyAuthPassword, pageCdpConnection);
     await driver.sleep(10_000);
+  } else if (host !== "") {
+    const proxyAddr = `${host}:${port}`;
+  
+    const chromeOptions = new chrome.Options(),
+      driverProxyConfig = proxy.manual({
+        http: proxyAddr,
+        https: proxyAddr
+      });
+  
+    chromeOptions.setProxy(driverProxyConfig);
+    chromeOptions.setLoggingPrefs({ performance: 'ALL' });
+  
+    driver = await new Builder()
+      .forBrowser('chrome')
+      .setChromeOptions(chromeOptions)
+      .build();
+  
+    const pageCdpConnection = await driver.createCDPConnection('page');
+    await driver.register(proxyAuthUser || proxyConfig.proxyAuthUser, proxyAuthPassword || proxyConfig.proxyAuthPassword, pageCdpConnection);
+    await driver.sleep(10_000);
+  } else {
+    driver = await new Builder().forBrowser('chrome').build();
+  }
 
-  }
-  else {
-    driver = await new Builder().forBrowser('chrome').build(); // Build the driver without proxy configuration
-  }
+/**
+ * Parse Cookie,
+ * Make Head
+ * Get Page Content
+ */
 
   try {
-
-    // Navigate to the URL using the driver
-    await driver.get(url);
+    await driver.get(url); // Navigate to the URL using the driver
     // Set cookie data into web driver
-    function parseCookie(cookieStr) {
-      let cookieArr = cookieStr.split('; ');
-      let cookieObj = {};
 
-      for (let i = 0; i < cookieArr.length; i++) {
-          let cookiePair = cookieArr[i].split('=');
-
-          if (cookiePair[0].toLowerCase() === 'expires') {
-              cookieObj['expiry'] = new Date(cookiePair[1]).getTime() / 1000; // Convert to Unix timestamp
-          } else if (cookiePair[0].toLowerCase() === 'path') {
-              cookieObj['path'] = cookiePair[1];
+    const parseCookie = (cookieStr) => {
+        const cookieArr = cookieStr.split('; ');
+        const cookieObj = {};
+      
+        for (let i = 0; i < cookieArr.length; i++) {
+          const [key, value] = cookieArr[i].split('=');
+      
+          if (key.toLowerCase() === 'expires') {
+            cookieObj.expiry = new Date(value).getTime() / 1000; // Convert to Unix timestamp
+          } else if (key.toLowerCase() === 'path') {
+            cookieObj.path = value;
           } else {
-              cookieObj['name'] = cookiePair[0];
-              cookieObj['value'] = cookiePair[1];
+            cookieObj.name = key;
+            cookieObj.value = value;
           }
+        }
+      
+        return cookieObj;
       }
-
-      return cookieObj;
-    }
 
     if(cookies){
       await driver.manage().deleteAllCookies();
       await driver.manage().addCookie(parseCookie(cookies));
       // await driver.navigate().refresh();
-    } 
-    // Get the httpResponseHeaders by http module
-    urlParams = URLParse(url, true);
+    }
+
+    urlParams = URLParse(url, true);     // Get the httpResponseHeaders by http module
+
     let logs = await driver.manage().logs().get('performance');
-    
-    logs.forEach(function (log) {
-        let message = JSON.parse(log.message).message;
-        if (message.method === 'Network.responseReceived') {
-          httpResponseHeaders = message.params.response.headers;
-        }
-    });
 
-    // Get the initial URL and add it to the redirectionChain
-    const initialUrl = await driver.getCurrentUrl();
+    httpResponseHeaders = logs
+        .map(log => JSON.parse(log.message).message)
+        .find(message => message.method === 'Network.responseReceived')
+        .params.response.headers;
 
-    // Init landing URL into initialUrl
-    landingUrl = initialUrl;
-    // Parse LandingURL into urlParams
-    urlParams = URLParse(landingUrl, true);
-    // Follow redirects and update the redirectionChain
-    var currentUrl = initialUrl;
-    
+    const initialUrl = await driver.getCurrentUrl(); // Get the initial URL and add it to the redirectionChain
+
+    landingUrl = initialUrl; // Init landing URL into initialUrl
+
+    urlParams = URLParse(landingUrl, true); // Parse LandingURL into urlParams
+
+    var currentUrl = initialUrl; // Follow redirects and update the redirectionChain
+
     redirectionChain.push({
       httpCode: 301,
       httpDescription: 301,
@@ -6100,25 +6060,21 @@ app.post('/api/v3/navigate', async (req, res) => {
     urlRedirectSmart = true; // URL redirect smart flag
     
     while (true) {
-      const entries = await driver.executeScript(() => {
-        return window.performance.getEntries();
-      });
-
-      if (!entries || entries.length === 0) {
-        break; // No more redirects or no entries found
-      }
+      const entries = await driver.executeScript(() => window.performance.getEntries());
+      
+      if (!entries || entries.length === 0) // No more redirects or no entries found
+        break;
 
       const entry = entries[0];
-      if (!entry.responseStatus && redirectionChain.length > 1) {
-        break; // No response available
-      }
+      
+      if (!entry.responseStatus && redirectionChain.length > 1) // No response available
+          break;
 
-      const httpCode = entry.responseStatus;
+      const { responseStatus: httpCode, name: nextUrl } = entry;
       const httpDescription = entry.responseStatus;
-      const nextUrl = entry.name;
-      if (!nextUrl || nextUrl === currentUrl && redirectionChain.length > 1) {
-        break; // No more redirects or cyclic redirect
-      }
+
+      if (!nextUrl || (nextUrl === currentUrl && redirectionChain.length > 1)) // No more redirects or cyclic redirect
+        break;
 
       redirectionChain.push({
         httpCode,
@@ -6127,85 +6083,91 @@ app.post('/api/v3/navigate', async (req, res) => {
       });
 
       if (httpCode !== 200) {
-        // Handle error case here
         console.log(`Error: ${httpCode} ${httpDescription}`);
         break;
       }
 
-      if(nextUrl != currentUrl)
+      if(nextUrl != currentUrl) {
         await driver.get(nextUrl);
-      currentUrl = nextUrl;
+        currentUrl = nextUrl;
+      }
     }
-    // *** Integrate the code from the previous steps ***
+
     // Add base tag on top of the head section
     await driver.executeScript(`
        var base = document.createElement('base');
        base.href = '${urlParams.protocol + "//" + urlParams.host}';
        document.head.insertBefore(base, document.head.firstChild);
     `);
-    // Delay some time for ajax loading
-    const delay = ms => new Promise(res => setTimeout(res, ms));
-    if(waitForAjax){
-      await delay(waitForAjax);
+
+    const delay = ms => new Promise(res => setTimeout(res, ms)); // Delay some time for ajax loading
+
+    if(delayForAjax) {
+      await delay(delayForAjax);
     }
-    // Declear originPage and pageBody
-    var originPage = '', pageBody = '';
-    // Save originPage HTML
-    pageBody = await driver.getPageSource();
-    if(includeOriginalHtml)
+
+    let originPage = ''; // Declare originPage variable
+    const pageBody = await driver.getPageSource(); // Save originPage HTML
+
+    if(isOriginalHtml)
         originPage = pageBody;
-    // page Encoding, frame count
-    var originalPageEncoding = await driver.executeScript("return document.characterSet");
-    var frameData = await driver.findElements(By.tagName('iframe'));
-    var hasFrames = frameData.length;
-    console.log(hasFrames);
-    
-    async function extractIframe(driver, mainPage) {
+
+/**
+ * Page Encodeing and Frame Count
+ *
+ */
+
+    const originalPageEncoding = await driver.executeScript("return document.characterSet");
+    const frameData = await driver.findElements(By.tagName('iframe'));
+    const hasFrames = frameData.length;
+
+    const extractIframe = async (driver, mainPage) => {
       const $ = cheerio.load(mainPage);
       await processIframes(driver, $, $('body'), 0);
       return $.html();
     }
-    
-    async function processIframes(driver, $, root, count) {
-      count ++;
-      if(count > 20) return;
-      let iframes = Array.from(root.find('iframe'));
-      console.log(iframes.length);
-      for (let i = 0; i < iframes.length; i++) {
-        try {
-          const iframeElem = $(iframes[i]);
 
-          // Find the iframe WebElement and switch to it
-          const iframe = await driver.findElements(By.css('iframe'));
-          await driver.switchTo().frame(iframe[i]);
-    
-          let page = await driver.getPageSource();
-          let pageURL = iframeElem.attr('src');
-          let pageParams;
-    
-          if (pageURL) {
-            pageParams = URLParse(pageURL, true);
-            page = linkConverter.convert(page, pageParams.protocol + "//" + pageParams.host);
+    const processIframes = async (driver, $, root, count) => {
+        count++;
+
+        if (count > 20) return;
+
+        const iframes = root.find('iframe').toArray();
+
+        for (const iframe of iframes) {
+          try {
+            const iframeElem = $(iframe);
+
+            // Find the iframe WebElement and switch to it
+            const frameElement = await driver.findElement(By.css('iframe'));
+            await driver.switchTo().frame(frameElement);
+
+            let page = await driver.getPageSource();
+            let pageURL = iframeElem.attr('src');
+            let pageParams;
+
+            if (pageURL) {
+              pageParams = URLParse(pageURL, true);
+              page = linkConverter.convert(page, `${pageParams.protocol}//${pageParams.host}`);
+            }
+
+            const $nested = cheerio.load(page); // Recursively process nested iframes
+
+            await processIframes(driver, $nested, $nested('body'), count + 1);
+
+            iframeElem.html($nested.html()); // Insert the iframe content directly into the iframe element in the Cheerio context
+
+            await driver.switchTo().defaultContent();
+          } catch (error) {
+            console.error(error);
           }
-    
-          // Recursively process nested iframes
-          const $nested = cheerio.load(page);
-          await processIframes(driver, $nested, $nested('body'), count + 1);
-    
-          // Insert the iframe content directly into the iframe element in the Cheerio context
-          iframeElem.html($nested.html());
-    
-          await driver.switchTo().defaultContent();
-        } catch (error) {
-          console.error(error);
         }
-      }
     }
-    
-    function setIframeSrcdoc(pageHTML) {
+
+    const setIframeSrcdoc = pageHTML => {
       const $ = cheerio.load(pageHTML);
     
-      function processIframeElem(iframeElem) {
+      const processIframeElem = iframeElem => {
         // Parse the srcdoc attribute or inner HTML into a new Cheerio context
         const srcdoc = iframeElem.attr('srcdoc') || iframeElem.html();
         const $srcdoc = cheerio.load(srcdoc);
@@ -6227,47 +6189,46 @@ app.post('/api/v3/navigate', async (req, res) => {
     
       return $.html();
     }
-    function extractNthIframeSrcdoc(pageHTML, n) {
+
+    const extractNthIframeSrcdoc = (pageHTML, n) => {
       const $ = cheerio.load(pageHTML);
       let count = 0;
       let srcdocContent;
     
-      function processIframeElem(iframeElem) {
-        // If we've already found the nth iframe, no need to continue
-        if (srcdocContent !== undefined) {
+      const processIframeElem = iframeElem => {
+        if (srcdocContent !== undefined) { // If we've already found the nth iframe, no need to continue
           return;
         }
-    
-        // If this is the nth iframe, extract the srcdoc content and stop
-        if (count === n) {
+
+        if (count === n) { // If this is the nth iframe, extract the srcdoc content and stop
           srcdocContent = iframeElem.attr('srcdoc');
           return;
         }
-    
+
         count++;
-    
+
         // Parse the srcdoc attribute or inner HTML into a new Cheerio context
         const srcdoc = iframeElem.attr('srcdoc') || iframeElem.html();
         const $srcdoc = cheerio.load(srcdoc);
-    
+
         // Find all iframes in the srcdoc and process them
         $srcdoc('iframe').each((i, nestedIframe) => {
           processIframeElem($srcdoc(nestedIframe));
         });
       }
-    
+
       // Process all iframes in the HTML
       $('iframe').each((i, iframe) => {
         processIframeElem($(iframe));
       });
-    
+
       return srcdocContent;
     }
-    console.log("here");
+
     // Call the function
     pageBody = await extractIframe(driver, pageBody);
     pageBody = setIframeSrcdoc(pageBody);
-    
+
     // Get Frame HTML content
     if(frameId > 0){
       pageBody = extractNthIframeSrcdoc(pageBody, frameId - 1);
@@ -6294,44 +6255,50 @@ app.post('/api/v3/navigate', async (req, res) => {
     const responseTimeElapsed = responseTimeEnd - responseTimeStart;
 
     // Remove scripts on the pages.
-    if(removePageScripts == true)
+    if(removeScripts == true)
       pageBody = removeScript(pageBody);
     // pageBody = linkConverter.convert(pageBody, urlParams.protocol + "//" + urlParams.host);
 
-    // Send the response
+/**
+ * Return the Final Response
+ *
+ */
+
     if (renderFormat === 'html') {
-      res.status(200).send(pageBody); // Send the page body as HTML response
+        res.status(200).send(pageBody); // Send the page body as HTML response
     } else if (renderFormat === 'json') {
-      if(forceBody == false)
-        pageBody = '';
-      const responseObj = JSON.stringify({
-        responseTime: { startTime: responseTimeStart, endTime: responseTimeEnd, elapsedTime: responseTimeElapsed },
-        correlationId: correlationId,
-        nodeServerPid: nodeServerPid,
-        hostname: hostname,
-        publicIp: publicIp,
-        privateIp: privateIp,
-        aws: aws,
-        layoutEngine: layoutEngine,
-        url: req.body.url,
-        landingUrl: landingUrl,
-        urlRedirectStrict: urlRedirectStrict,
-        urlRedirectSmart: urlRedirectSmart,
-        redirectionChain: redirectionChain,
-        httpResponseHeaders: normalizeHttpResponseHeaders(httpResponseHeaders),
-        remoteHost: urlParams.host,
-        remotePort: urlParams.port, 
-        remoteUri: urlParams.pathname,
-        urlFragment: urlParams.hash,
-        httpScheme: urlParams.protocol,
-        forceBody: forceBody,
-        renderFormat: renderFormat,
-        originalPageEncoding: originalPageEncoding,
-        hasFrames: hasFrames,
-        navigationViaProxy: proxyEnabled,
-        pageBody: pageBody,
-        originalHtml: originPage
+        if(forceBodyValue == false)
+            pageBody = '';
+
+        const responseObj = JSON.stringify({
+            responseTime: { startTime: responseTimeStart, endTime: responseTimeEnd, elapsedTime: responseTimeElapsed },
+            correlationId: correlationId,
+            nodeServerPid: nodeServerPid,
+            hostname: hostname,
+            publicIp: publicIp,
+            privateIp: privateIp,
+            aws: aws,
+            layoutEngine: layoutEngine,
+            url: url,
+            landingUrl: landingUrl,
+            urlRedirectStrict: urlRedirectStrict,
+            urlRedirectSmart: urlRedirectSmart,
+            redirectionChain: redirectionChain,
+            httpResponseHeaders: normalizeHttpResponseHeaders(httpResponseHeaders),
+            remoteHost: urlParams.host,
+            remotePort: urlParams.port,
+            remoteUri: urlParams.pathname,
+            urlFragment: urlParams.hash,
+            httpScheme: urlParams.protocol,
+            forceBody: forceBodyValue,
+            renderFormat: renderFormat,
+            originalPageEncoding: originalPageEncoding,
+            hasFrames: hasFrames,
+            navigationViaProxy: proxyEnabled,
+            pageBody: pageBody,
+            originalHtml: originPage
       });
+
       res.status(200).send(responseObj); // Send the response object as JSON response
     }
   } catch (error) {
@@ -6342,9 +6309,9 @@ app.post('/api/v3/navigate', async (req, res) => {
   }
 });
 
-
-/*
- * END v3
+/**
+ * END VERSION 3 API
+ *
  */
 
 
